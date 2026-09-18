@@ -197,3 +197,16 @@ def test_repeated_requests_stay_stable(client_with_stub):
     codes = [client.post("/optimize-energy", json=PAYLOAD).status_code for _ in range(5)]
 
     assert codes == [200] * 5
+
+
+def test_index_serves_the_demo_console(client_with_stub):
+    """The optional browser console is served, and it leaks no configuration."""
+    client, _ = client_with_stub
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert "GridWise Energy Optimizer" in response.text
+    for secret_name in ("GEMINI_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "api_key"):
+        assert secret_name not in response.text

@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from app.config import get_settings
 from app.llm.registry import build_chain
@@ -26,6 +27,9 @@ from app.pipeline import (
 from app.schemas import HealthResponse, OptimizeRequest, OptimizeResponse
 
 logger = logging.getLogger("gridwise")
+
+#: Optional browser console for human testing. It is not part of the judged API surface.
+INDEX_HTML = Path(__file__).parent / "static" / "index.html"
 
 
 @asynccontextmanager
@@ -54,6 +58,12 @@ app = FastAPI(
     docs_url=None,
     redoc_url=None,
 )
+
+
+@app.get("/", include_in_schema=False)
+async def index() -> FileResponse:
+    """Serve the demo console. Static file only: no configuration or credential reaches it."""
+    return FileResponse(INDEX_HTML, media_type="text/html")
 
 
 @app.get("/health", response_model=HealthResponse)

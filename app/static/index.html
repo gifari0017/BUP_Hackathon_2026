@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GridWise Energy Optimizer</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --line: #d8dce2; --ink: #1b1f24; --muted: #5c6672;
+    --accent: #1f6feb; --ok: #1a7f37; --err: #b42318; --code: #f2f4f7;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  header { background: var(--panel); border-bottom: 1px solid var(--line); padding: 18px 20px; }
+  h1 { margin: 0; font-size: 19px; }
+  header p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+  main { max-width: 1020px; margin: 0 auto; padding: 20px; }
+  section {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 16px; margin-bottom: 16px;
+  }
+  h2 { margin: 0 0 10px; font-size: 14px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  textarea {
+    width: 100%; min-height: 220px; margin-top: 12px; padding: 10px;
+    border: 1px solid var(--line); border-radius: 6px; background: var(--code);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px;
+    resize: vertical;
+  }
+  button {
+    border: 1px solid var(--line); border-radius: 6px; padding: 8px 14px;
+    background: var(--panel); color: var(--ink); font-size: 14px; cursor: pointer;
+  }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .55; cursor: default; }
+  #status { color: var(--muted); font-size: 13px; }
+  #status.busy { color: var(--accent); }
+  #status.done { color: var(--ok); }
+  #status.failed { color: var(--err); }
+  #errorPanel {
+    display: none; border-color: var(--err); background: #fff5f4;
+  }
+  #errorPanel h2 { color: var(--err); }
+  #errorText { margin: 0; white-space: pre-wrap; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+  #results { display: none; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+  .card { border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; }
+  .card span { display: block; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  .card strong { font-size: 18px; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .scroll { max-height: 360px; overflow: auto; }
+  pre {
+    margin: 0; padding: 10px; background: var(--code); border-radius: 6px;
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px;
+    white-space: pre; overflow-x: auto; max-height: 420px;
+  }
+  code.pill { background: var(--code); padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>GridWise Energy Optimizer</h1>
+  <p>Demo console for <code class="pill">POST /optimize-energy</code>. The judged API is unchanged; this page is a human testing interface only.</p>
+</header>
+
+<main>
+  <section>
+    <h2>Scenario input</h2>
+    <div class="row">
+      <input type="file" id="fileInput" accept=".json,application/json" aria-label="Choose JSON File">
+      <button id="runBtn" class="primary" type="button">Run Optimization</button>
+      <button id="clearBtn" type="button">Clear</button>
+      <span id="status">Choose a JSON file, or paste a scenario below.</span>
+    </div>
+    <textarea id="jsonInput" spellcheck="false" placeholder='Paste a GridWise scenario, or an official public case containing {"input": {...}}'></textarea>
+  </section>
+
+  <section id="errorPanel">
+    <h2>Error</h2>
+    <p id="errorText"></p>
+  </section>
+
+  <section id="results">
+    <h2>Summary</h2>
+    <div class="cards">
+      <div class="card"><span>Scenario ID</span><strong id="sumScenario">-</strong></div>
+      <div class="card"><span>Total Grid kWh</span><strong id="sumGrid">-</strong></div>
+      <div class="card"><span>Total Cost BDT</span><strong id="sumCost">-</strong></div>
+      <div class="card"><span>Peak Grid kWh</span><strong id="sumPeak">-</strong></div>
+    </div>
+
+    <h2 style="margin-top:20px">Directive interpretation</h2>
+    <div class="scroll"><table id="directiveTable">
+      <thead><tr><th>Note</th><th>Applies</th><th>Directive type</th><th>Structured adjustment</th><th>Explanation</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+
+    <h2 style="margin-top:20px">Hourly plan</h2>
+    <div class="scroll"><table id="planTable">
+      <thead><tr>
+        <th>Hour</th><th class="num">Grid kWh</th><th class="num">Solar used kWh</th>
+        <th>Battery action</th><th class="num">Battery kWh</th><th class="num">Battery after kWh</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table></div>
+
+    <h2 style="margin-top:20px">Plan summary</h2>
+    <p id="planSummary" style="margin:0"></p>
+
+    <h2 style="margin-top:20px">Raw JSON response</h2>
+    <pre id="rawOutput"></pre>
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var fileInput = document.getElementById("fileInput");
+  var jsonInput = document.getElementById("jsonInput");
+  var runBtn = document.getElementById("runBtn");
+  var clearBtn = document.getElementById("clearBtn");
+  var statusEl = document.getElementById("status");
+  var errorPanel = document.getElementById("errorPanel");
+  var errorText = document.getElementById("errorText");
+  var results = document.getElementById("results");
+
+  function setStatus(message, kind) {
+    statusEl.textContent = message;
+    statusEl.className = kind || "";
+  }
+
+  function showError(message) {
+    errorText.textContent = message;
+    errorPanel.style.display = "block";
+    results.style.display = "none";
+  }
+
+  function hideError() {
+    errorPanel.style.display = "none";
+  }
+
+  function number(value) {
+    return typeof value === "number" ? value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : String(value);
+  }
+
+  function fillRow(row, cells) {
+    cells.forEach(function (cell) {
+      var td = document.createElement("td");
+      if (cell.numeric) { td.className = "num"; }
+      td.textContent = cell.text;
+      row.appendChild(td);
+    });
+  }
+
+  function render(body) {
+    document.getElementById("sumScenario").textContent = body.scenario_id;
+    document.getElementById("sumGrid").textContent = number(body.total_grid_kwh);
+    document.getElementById("sumCost").textContent = number(body.total_cost_bdt);
+    document.getElementById("sumPeak").textContent = number(body.peak_grid_kwh);
+    document.getElementById("planSummary").textContent = body.plan_summary || "";
+
+    var directiveBody = document.querySelector("#directiveTable tbody");
+    directiveBody.textContent = "";
+    (body.directive_interpretation || []).forEach(function (entry) {
+      var row = document.createElement("tr");
+      fillRow(row, [
+        { text: String(entry.note_index) },
+        { text: entry.applies ? "true" : "false" },
+        { text: entry.directive_type },
+        { text: entry.structured_adjustment === null ? "null" : JSON.stringify(entry.structured_adjustment) },
+        { text: entry.explanation || "" }
+      ]);
+      directiveBody.appendChild(row);
+    });
+
+    var planBody = document.querySelector("#planTable tbody");
+    planBody.textContent = "";
+    (body.hourly_plan || []).forEach(function (entry) {
+      var row = document.createElement("tr");
+      fillRow(row, [
+        { text: String(entry.hour) },
+        { text: number(entry.grid_kwh), numeric: true },
+        { text: number(entry.solar_used_kwh), numeric: true },
+        { text: entry.battery_action },
+        { text: number(entry.battery_kwh), numeric: true },
+        { text: number(entry.battery_energy_after_kwh), numeric: true }
+      ]);
+      planBody.appendChild(row);
+    });
+
+    document.getElementById("rawOutput").textContent = JSON.stringify(body, null, 2);
+    results.style.display = "block";
+  }
+
+  fileInput.addEventListener("change", function () {
+    var file = fileInput.files && fileInput.files[0];
+    if (!file) { return; }
+    var reader = new FileReader();
+    reader.onload = function () {
+      hideError();
+      var text = String(reader.result);
+      try {
+        jsonInput.value = JSON.stringify(JSON.parse(text), null, 2);
+        setStatus("Loaded " + file.name + ". Click Run Optimization.", "done");
+      } catch (err) {
+        jsonInput.value = text;
+        setStatus("File loaded but it is not valid JSON.", "failed");
+        showError("Could not parse " + file.name + ": " + err.message);
+      }
+    };
+    reader.onerror = function () {
+      setStatus("Could not read the file.", "failed");
+      showError("The browser could not read " + file.name + ".");
+    };
+    reader.readAsText(file);
+  });
+
+  clearBtn.addEventListener("click", function () {
+    fileInput.value = "";
+    jsonInput.value = "";
+    hideError();
+    results.style.display = "none";
+    setStatus("Cleared. Choose a JSON file, or paste a scenario below.");
+  });
+
+  runBtn.addEventListener("click", async function () {
+    hideError();
+    results.style.display = "none";
+
+    var raw = jsonInput.value.trim();
+    if (!raw) {
+      setStatus("Nothing to send.", "failed");
+      showError("Choose a JSON file or paste a scenario first.");
+      return;
+    }
+
+    var parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (err) {
+      setStatus("Invalid JSON.", "failed");
+      showError("The text is not valid JSON: " + err.message);
+      return;
+    }
+
+    // An official public case wraps the scenario in "input"; a raw scenario is sent as-is.
+    var payload = parsed && typeof parsed.input === "object" && parsed.input !== null ? parsed.input : parsed;
+
+    runBtn.disabled = true;
+    clearBtn.disabled = true;
+    setStatus("Optimizing...", "busy");
+    var started = performance.now();
+
+    try {
+      var response = await fetch("/optimize-energy", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      var elapsed = ((performance.now() - started) / 1000).toFixed(2);
+      var text = await response.text();
+
+      var body;
+      try {
+        body = JSON.parse(text);
+      } catch (err) {
+        setStatus("HTTP " + response.status + " in " + elapsed + "s", "failed");
+        showError("HTTP " + response.status + ": the response was not JSON.\n\n" + text.slice(0, 2000));
+        return;
+      }
+
+      if (!response.ok) {
+        setStatus("HTTP " + response.status + " in " + elapsed + "s", "failed");
+        showError("HTTP " + response.status + "\n\n" + JSON.stringify(body, null, 2));
+        return;
+      }
+
+      render(body);
+      setStatus("Completed in " + elapsed + "s", "done");
+    } catch (err) {
+      setStatus("Request failed.", "failed");
+      showError("The request could not be completed: " + err.message);
+    } finally {
+      runBtn.disabled = false;
+      clearBtn.disabled = false;
+    }
+  });
+})();
+</script>
+</body>
+</html>
