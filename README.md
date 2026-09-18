@@ -139,12 +139,12 @@ git-ignored and is never committed or copied into an image.
 | `GRIDWISE_LLM_FALLBACK_PROVIDER` | no | Second **language-model** provider, tried only if the primary fails. |
 | `GRIDWISE_LLM_FALLBACK_MODEL` | no | Model identifier for the fallback provider. |
 | `LLM_TIMEOUT_SECONDS` | no | Per-call timeout. Default 12. |
-| `LLM_TRANSPORT_RETRIES` | no | Retries for a timeout or rate limit. Default 1. |
+| `LLM_TRANSPORT_RETRIES` | no | Retries for a timeout or rate limit; the server's `Retry-After` is honoured, with exponential backoff otherwise. Default 3. |
 | `LLM_REPAIR_ATTEMPTS` | no | Guardrail-feedback repair attempts per provider. Default 1. |
 | `PORT` | no | Listen port. Default 8000. |
 | `LOG_LEVEL` | no | Default `INFO`. |
 
-**Provider and model used for the submission:** see `.env.example` for the configured default. The
+**Provider and model used for the submission:** Google Gemini, model `gemini-3.5-flash-lite`, chosen by measurement against this account: it answers the interpretation prompt in about 1.5 s, where the larger Flash models either returned HTTP 503 under load or took over 4 s. The
 model identifier is verified against the account before the round rather than assumed:
 
 ```bash

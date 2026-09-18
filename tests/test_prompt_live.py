@@ -10,6 +10,9 @@ the hidden cases paraphrase the same rules in unseen wording.
 
 from __future__ import annotations
 
+import asyncio
+import os
+
 import httpx
 import pytest
 
@@ -19,6 +22,16 @@ from app.pipeline import interpret_notes
 from app.schemas import OptimizeRequest
 
 pytestmark = pytest.mark.live
+
+#: Free-tier Gemini keys allow roughly 15 requests per minute. This suite fires one request per
+#: test, so it paces itself; without this the run measures the rate limiter, not the prompt.
+LIVE_PACING_SECONDS = float(os.environ.get("LIVE_PACING_SECONDS", "4.5"))
+
+
+@pytest.fixture(autouse=True)
+async def _pace_requests():
+    yield
+    await asyncio.sleep(LIVE_PACING_SECONDS)
 
 CAPACITY = 400.0
 

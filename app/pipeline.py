@@ -97,7 +97,8 @@ async def _call_with_transport_retry(
                 break
             if isinstance(exc, RateLimited):
                 # Retrying a 429 immediately just earns another 429, so honour the server's hint.
-                wait = exc.retry_after if exc.retry_after is not None else 1.0
+                # Providers that send no Retry-After header get exponential backoff instead.
+                wait = exc.retry_after if exc.retry_after is not None else 2.0 ** attempt
                 await asyncio.sleep(min(max(wait, 0.0), MAX_RETRY_WAIT_SECONDS))
     raise last if last is not None else ProviderError("provider call failed")
 

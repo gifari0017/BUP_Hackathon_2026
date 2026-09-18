@@ -52,6 +52,9 @@ There are exactly six. Never invent another.
 - noon is hour 12. midnight is hour 0. 12 AM is hour 0. 12 PM is hour 12.
 - "through 9 PM" or "up to and including 9 PM" includes hour 21: [.., 21].
 - A single hour like "during the 3 PM hour" is [15].
+- The end-exclusive rule applies to EVERY directive type, not only solar. "No discharge from 5 PM
+  to 7 PM" is [17, 18], never [17, 18, 19]. The last named hour is the moment the window ENDS, so
+  that hour is not included.
 
 ## solar_reduction factor rule
 

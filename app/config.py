@@ -16,7 +16,7 @@ class Settings(BaseSettings):
 
     # --- primary language model -------------------------------------------------
     gridwise_llm_provider: str = "gemini"
-    gridwise_llm_model: str = "gemini-2.5-flash"
+    gridwise_llm_model: str = "gemini-3.5-flash-lite"
 
     # --- optional second language-model provider (failover) ---------------------
     # Never a non-LLM interpreter: the mandatory-LLM rule applies to every success path.
@@ -30,7 +30,7 @@ class Settings(BaseSettings):
 
     # --- request handling -------------------------------------------------------
     llm_timeout_seconds: float = 12.0
-    llm_transport_retries: int = 1
+    llm_transport_retries: int = 3
     llm_repair_attempts: int = 1
 
     # --- server -----------------------------------------------------------------
