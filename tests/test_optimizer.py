@@ -144,3 +144,18 @@ def test_randomized_feasible_batteries_always_produce_a_valid_plan():
             response.peak_grid_kwh,
         )
         assert report.violations == []
+
+
+def test_free_solar_is_still_reported_when_the_tariff_is_zero():
+    """Cost-neutral hours must not silently curtail available solar."""
+    request = OptimizeRequest(
+        scenario_id="T",
+        operator_notes=["n"],
+        hours=hours(solar=40.0, tariff=[0.0] * 24),
+        battery=BATTERY,
+    )
+
+    response = build_response(request, [])
+
+    assert all(entry.solar_used_kwh == pytest.approx(40.0, abs=0.01) for entry in response.hourly_plan)
+    assert response.total_cost_bdt == pytest.approx(0.0, abs=0.01)

@@ -40,6 +40,11 @@ IDLE_EPSILON = 1e-9
 #: Residual above which we attempt a slack-checked neutrality correction.
 NEUTRALITY_REPAIR_THRESHOLD = 1e-9
 
+#: Tie-break weight that prefers using free solar when an hour's tariff is zero and the choice is
+#: cost-neutral. Small enough (worst case ~5e-6 BDT over a day) that it cannot change which
+#: schedule is optimal under the official 0.01 tolerance.
+SOLAR_TIEBREAK = 1e-9
+
 
 class InfeasibleScenario(Exception):
     """The directive set admits no valid schedule. Never softened into a violating plan."""
@@ -63,8 +68,9 @@ def solve(inputs: SolverInputs) -> SolvedPlan:
     demand = np.asarray(inputs.demand, dtype=float)
     tariff = np.asarray(inputs.tariff, dtype=float)
 
-    # cost = const + sum(tariff * b) - sum(tariff * s)
-    objective = np.concatenate([-tariff, tariff])
+    # cost = const + sum(tariff * b) - sum(tariff * s), plus a negligible preference for using
+    # solar rather than curtailing it when the two are cost-equivalent.
+    objective = np.concatenate([-(tariff + SOLAR_TIEBREAK), tariff])
 
     rows: list[np.ndarray] = []
     rhs: list[float] = []
