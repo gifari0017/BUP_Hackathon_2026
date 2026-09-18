@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -r requirements-dev.txt
+      - name: Offline test suite
+        run: pytest -m "not live" -q
+      - name: No public sample data inside app/
+        run: bash scripts/check_no_hardcoding.sh
+      - name: No committed secrets
+        run: |
+          if git grep -nIE '(sk-[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{30,})' -- . ':!*.md'; then
+            echo "FAIL: possible credential committed"
+            exit 1
+          fi
+          echo "OK: no credential pattern found"
