@@ -2,6 +2,8 @@
 
 BUP CSE Fest 2026 Hackathon, online preliminary round.
 
+**Live service:** <https://buphackathon2026-production.up.railway.app>
+
 One HTTP service that reads 1–3 natural-language campus operator notes, converts them into
 machine-checkable directives with a language model, validates that interpretation deterministically,
 applies it to a 24-hour energy scheduling problem, and returns the cost-minimal schedule.
@@ -180,7 +182,8 @@ python scripts/run_public_cases.py http://localhost:8000
 The script posts all ten cases, compares the returned interpretation against the reference
 semantics, reports the cost-quality ratio `organizer_optimal / ours` for each case, and prints mean,
 max, and p95 latency. Expected result: every case `OK`, quality `1.0000`, and
-`cases with differences or errors: 0/10`.
+`cases with differences or errors: 0/10`. Measured against the deployed service:
+10/10 at the reference optimal cost, p50 1.45 s, p95 1.82 s.
 
 Paraphrase robustness against a live model (needs a key; 27 hand-written notes that appear nowhere
 in the public pack):
@@ -261,16 +264,22 @@ single language-model call dominates request latency.
 The image contains no credentials. Supply them at runtime.
 
 ```bash
-docker pull ghcr.io/<owner>/<repository>:<tag>
+docker pull ghcr.io/gifari0017/bup_hackathon_2026:latest
 
 docker run --rm -p 8000:8000 \
   -e GRIDWISE_LLM_PROVIDER=gemini \
-  -e GRIDWISE_LLM_MODEL=<model id> \
+  -e GRIDWISE_LLM_MODEL=gemini-3.5-flash-lite \
   -e GEMINI_API_KEY=<your key> \
-  ghcr.io/<owner>/<repository>:<tag>
+  ghcr.io/gifari0017/bup_hackathon_2026:latest
 
 curl -s http://localhost:8000/health
 # {"status":"ok"}
+```
+
+Immutable digest, for a reproducible pull:
+
+```
+ghcr.io/gifari0017/bup_hackathon_2026@sha256:b1d71920da3045110c809ab9bdeeadbecb1f54a71e35113a725a59286f388a03
 ```
 
 The container binds `0.0.0.0`, honours `PORT` (default 8000), runs as a non-root user, and carries a
