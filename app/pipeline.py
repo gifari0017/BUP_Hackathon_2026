@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from app.directives import build_solver_inputs
@@ -10,7 +11,7 @@ from app.guardrails import (
     ValidatedDirective,
     validate_interpretation,
 )
-from app.llm.base import LLMProvider, ProviderError
+from app.llm.base import LLMProvider, ProviderError, RateLimited
 from app.optimizer import (
     InfeasibleScenario,
     SolverFailure,
@@ -28,6 +29,9 @@ from app.schemas import (
 logger = logging.getLogger("gridwise.pipeline")
 
 TOTALS_DECIMALS = 6
+
+#: Upper bound on a rate-limit wait, so one slow provider cannot blow the 30-second request budget.
+MAX_RETRY_WAIT_SECONDS = 8.0
 
 
 class InterpretationUnavailable(Exception):
@@ -84,11 +88,17 @@ async def _call_with_transport_retry(
     retries: int,
 ):
     last: ProviderError | None = None
-    for _ in range(retries + 1):
+    for attempt in range(retries + 1):
         try:
             return await provider.interpret(request.operator_notes, request.battery, feedback)
         except ProviderError as exc:
             last = exc
+            if attempt == retries:
+                break
+            if isinstance(exc, RateLimited):
+                # Retrying a 429 immediately just earns another 429, so honour the server's hint.
+                wait = exc.retry_after if exc.retry_after is not None else 1.0
+                await asyncio.sleep(min(max(wait, 0.0), MAX_RETRY_WAIT_SECONDS))
     raise last if last is not None else ProviderError("provider call failed")
 
 

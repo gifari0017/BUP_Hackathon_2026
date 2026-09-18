@@ -29,6 +29,14 @@ class ProviderNotConfigured(ProviderError):
     """The provider has no credential configured."""
 
 
+class RateLimited(ProviderError):
+    """The provider refused the call with HTTP 429. Carries the server's own wait hint."""
+
+    def __init__(self, message: str, retry_after: float | None = None) -> None:
+        super().__init__(message)
+        self.retry_after = retry_after
+
+
 @dataclass(frozen=True)
 class RawInterpretation:
     """Model output before deterministic validation."""

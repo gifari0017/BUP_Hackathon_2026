@@ -16,6 +16,7 @@ from app.llm.base import (
     LLMProvider,
     ProviderError,
     ProviderNotConfigured,
+    RateLimited,
     RawInterpretation,
     flat_entries_to_interpretation,
 )
@@ -85,6 +86,20 @@ def _json_schema() -> dict[str, Any]:
     }
 
 
+def _raise_for_status(provider: str, response: httpx.Response) -> None:
+    """Turn a non-200 into the right error type, without leaking the provider payload."""
+    if response.status_code == 200:
+        return
+    if response.status_code == 429:
+        header = response.headers.get("retry-after")
+        try:
+            retry_after = float(header) if header is not None else None
+        except ValueError:
+            retry_after = None
+        raise RateLimited(f"{provider} rate limited (HTTP 429)", retry_after)
+    raise ProviderError(f"{provider} returned HTTP {response.status_code}")
+
+
 def _parse_json(text: str) -> Any:
     try:
         return json.loads(text)
@@ -127,8 +142,7 @@ class GeminiProvider:
         except httpx.HTTPError as exc:
             raise ProviderError(f"gemini transport error: {type(exc).__name__}") from exc
 
-        if response.status_code != 200:
-            raise ProviderError(f"gemini returned HTTP {response.status_code}")
+        _raise_for_status("gemini", response)
 
         body = response.json()
         try:
@@ -186,8 +200,7 @@ class AnthropicProvider:
         except httpx.HTTPError as exc:
             raise ProviderError(f"anthropic transport error: {type(exc).__name__}") from exc
 
-        if response.status_code != 200:
-            raise ProviderError(f"anthropic returned HTTP {response.status_code}")
+        _raise_for_status("anthropic", response)
 
         body = response.json()
         for block in body.get("content", []):
@@ -213,6 +226,16 @@ class OpenAIProvider:
         self._api_key = api_key
         self._client = client
 
+    async def _post(self, payload: dict[str, Any]) -> httpx.Response:
+        try:
+            return await self._client.post(
+                "https://api.openai.com/v1/chat/completions",
+                json=payload,
+                headers={"Authorization": f"Bearer {self._api_key}"},
+            )
+        except httpx.HTTPError as exc:
+            raise ProviderError(f"openai transport error: {type(exc).__name__}") from exc
+
     async def interpret(
         self, notes: list[str], battery: Battery, repair_feedback: str | None = None
     ) -> RawInterpretation:
@@ -232,17 +255,15 @@ class OpenAIProvider:
                 },
             },
         }
-        try:
-            response = await self._client.post(
-                "https://api.openai.com/v1/chat/completions",
-                json=payload,
-                headers={"Authorization": f"Bearer {self._api_key}"},
-            )
-        except httpx.HTTPError as exc:
-            raise ProviderError(f"openai transport error: {type(exc).__name__}") from exc
+        response = await self._post(payload)
 
-        if response.status_code != 200:
-            raise ProviderError(f"openai returned HTTP {response.status_code}")
+        if response.status_code == 400 and _rejects_temperature(response):
+            # Newer models accept only the default temperature. Drop the field and retry once:
+            # determinism still comes from the strict schema and the fixed prompt.
+            payload.pop("temperature", None)
+            response = await self._post(payload)
+
+        _raise_for_status("openai", response)
 
         body = response.json()
         try:
@@ -257,6 +278,15 @@ class OpenAIProvider:
         return RawInterpretation(
             entries=flat_entries_to_interpretation(flat), provider=self.name, model=self._model
         )
+
+
+def _rejects_temperature(response: httpx.Response) -> bool:
+    """True when the model refused the request only because `temperature` was supplied."""
+    try:
+        error = response.json().get("error", {})
+    except ValueError:
+        return False
+    return error.get("param") == "temperature"
 
 
 PROVIDERS: dict[str, type] = {

@@ -182,3 +182,30 @@ async def test_persistent_infeasibility_raises_rather_than_softening():
 
     with pytest.raises(InfeasibleScenario):
         await pipeline.run([stub], INFEASIBLE_REQUEST)
+
+
+async def test_rate_limited_retry_waits_for_the_server_hint(monkeypatch):
+    """A 429 retried immediately just earns another 429."""
+    from app import pipeline
+    from app.llm.base import RateLimited
+
+    slept: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        slept.append(seconds)
+
+    monkeypatch.setattr(pipeline.asyncio, "sleep", fake_sleep)
+    stub = StubProvider("primary", [RateLimited("rate limited", retry_after=3.0), GOOD])
+
+    result = await interpret_notes([stub], REQUEST, transport_retries=1)
+
+    assert slept == [3.0]
+    assert len(result) == 2
+
+
+async def test_rate_limit_wait_is_capped():
+    from app import pipeline
+    from app.llm.base import RateLimited
+
+    assert pipeline.MAX_RETRY_WAIT_SECONDS <= 8.0
+    assert RateLimited("x", retry_after=None).retry_after is None
