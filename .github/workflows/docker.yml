@@ -41,6 +41,10 @@ jobs:
           docker rm -f gridwise
           exit 1
 
+      - name: Compute the lowercase image name
+        id: image
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -55,8 +59,10 @@ jobs:
           context: .
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}:latest
-            ghcr.io/${{ github.repository }}:${{ github.sha }}
+            ${{ steps.image.outputs.name }}:latest
+            ${{ steps.image.outputs.name }}:${{ github.sha }}
 
-      - name: Report the pullable digest
-        run: echo "digest ${{ steps.push.outputs.digest }}"
+      - name: Report the pullable image reference
+        run: |
+          echo "image  ${{ steps.image.outputs.name }}:latest"
+          echo "digest ${{ steps.push.outputs.digest }}"
